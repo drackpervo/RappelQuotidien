@@ -5,6 +5,8 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.media.RingtoneManager
 import androidx.core.app.NotificationCompat
 import com.example.MainActivity
 import com.example.RappelQuotidienApp
@@ -32,6 +34,9 @@ class TimerAlarmReceiver : BroadcastReceiver() {
 
         val message = "Temps écoulé pour votre session de \"%s\" (%d min) 🌟".format(activityName, durationMins)
 
+        val prefs = context.getSharedPreferences("rappel_quotidien_prefs", Context.MODE_PRIVATE)
+        val soundUriStr = prefs.getString("completion_sound_uri", null)
+
         val builder = NotificationCompat.Builder(context, RappelQuotidienApp.CHANNEL_TIMER)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle("Minuteur Terminé ! ⏱️")
@@ -39,12 +44,33 @@ class TimerAlarmReceiver : BroadcastReceiver() {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
+
+        if (soundUriStr != null) {
+            val customUri = Uri.parse(soundUriStr)
+            builder.setSound(customUri)
+            builder.setDefaults(NotificationCompat.DEFAULT_LIGHTS or NotificationCompat.DEFAULT_VIBRATE)
+            
+            // Re-play explicitly to ensure it plays
+            try {
+                val ringtone = RingtoneManager.getRingtone(context, customUri)
+                ringtone?.play()
+            } catch (e: Exception) {
+                // fallback
+            }
+        } else {
+            builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+            try {
+                val defaultUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val ringtone = RingtoneManager.getRingtone(context, defaultUri)
+                ringtone?.play()
+            } catch (e: Exception) {
+                // fallback
+            }
+        }
 
         notificationManager.notify(999, builder.build())
 
         // Nettoyer l'état dans SharedPreferences
-        val prefs = context.getSharedPreferences("rappel_quotidien_prefs", Context.MODE_PRIVATE)
         prefs.edit()
             .remove("timer_target_millis")
             .remove("timer_activity_name")

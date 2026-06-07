@@ -7,6 +7,10 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.util.Log
+import android.net.Uri
+import android.media.RingtoneManager
+import android.media.AudioAttributes
+import androidx.core.app.NotificationCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.RappelQuotidienApp
@@ -24,6 +28,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repository = AppRepository.getRepository(application)
     private val prefs = application.getSharedPreferences("rappel_quotidien_prefs", Context.MODE_PRIVATE)
+
+    // --- ÉTAT DU SON DE NOTIFICATION DE COMPLÉTION ---
+    val completionSoundUri = MutableStateFlow<String?>(null)
+    val completionSoundName = MutableStateFlow("Son par défaut")
+
+    init {
+        completionSoundUri.value = prefs.getString("completion_sound_uri", null)
+        completionSoundName.value = prefs.getString("completion_sound_name", "Son par défaut") ?: "Son par défaut"
+    }
+
+    fun saveCustomSound(uri: String?, name: String) {
+        prefs.edit()
+            .putString("completion_sound_uri", uri)
+            .putString("completion_sound_name", name)
+            .apply()
+        completionSoundUri.value = uri
+        completionSoundName.value = name
+    }
 
     // --- ÉTAT DE LA PLANIFICATION ---
     var selectedPeriodType = MutableStateFlow("DAY") // "DAY", "WEEK", "MONTH"
@@ -78,18 +100,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     periodKey = key
                 )
             )
+            com.example.receiver.SportTaskAppWidgetProvider.triggerUpdate(getApplication())
         }
     }
 
     fun toggleTaskCompletion(task: PlanningTask) {
         viewModelScope.launch {
-            repository.updateTask(task.copy(isCompleted = !task.isCompleted))
+            val newlyCompleted = !task.isCompleted
+            repository.updateTask(task.copy(isCompleted = newlyCompleted))
+            if (newlyCompleted) {
+                playCompletionSoundAndNotification(task.title, isTask = true)
+            }
+            com.example.receiver.SportTaskAppWidgetProvider.triggerUpdate(getApplication())
         }
     }
 
     fun deleteTask(task: PlanningTask) {
         viewModelScope.launch {
             repository.deleteTask(task)
+            com.example.receiver.SportTaskAppWidgetProvider.triggerUpdate(getApplication())
         }
     }
 
@@ -133,12 +162,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             val current = repository.getSportProgressByDate(todayDateKey)
             if (current != null) {
+                val newlyCompleted = !current.isCompleted
                 repository.saveSportProgress(
                     current.copy(
-                        isCompleted = !current.isCompleted,
-                        completionTime = if (!current.isCompleted) System.currentTimeMillis() else 0L
+                        isCompleted = newlyCompleted,
+                        completionTime = if (newlyCompleted) System.currentTimeMillis() else 0L
                     )
                 )
+                if (newlyCompleted) {
+                    playCompletionSoundAndNotification(current.exerciseName, isTask = false)
+                }
             } else {
                 repository.saveSportProgress(
                     SportProgress(
@@ -148,7 +181,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         completionTime = System.currentTimeMillis()
                     )
                 )
+                playCompletionSoundAndNotification(dailyProposedSportName, isTask = false)
             }
+            com.example.receiver.SportTaskAppWidgetProvider.triggerUpdate(getApplication())
         }
     }
 
@@ -421,5 +456,74 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (pendingIntent != null) {
             alarmManager.cancel(pendingIntent)
         }
+    }
+
+    fun playCompletionSoundAndNotification(name: String, isTask: Boolean) {
+        val context = getApplication<Application>()
+        playCustomSound(context)
+        sendLocalCompletionNotification(context, name, isTask)
+    }
+
+    fun playCustomSound(context: Context) {
+        try {
+            val soundUriStr = prefs.getString("completion_sound_uri", null)
+            val uri = if (soundUriStr != null) {
+                Uri.parse(soundUriStr)
+            } else {
+                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+            }
+            val ringtone = RingtoneManager.getRingtone(context, uri)
+            ringtone?.apply {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    audioAttributes = AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION_COMMUNICATION_INSTANT)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build()
+                }
+                play()
+            }
+        } catch (e: Exception) {
+            Log.e("AppViewModel", "Failed to play completion sound", e)
+        }
+    }
+
+    private fun sendLocalCompletionNotification(context: Context, name: String, isTask: Boolean) {
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val id = if (isTask) 201 else 202
+        
+        val title = if (isTask) "Objectif Atteint ! 🏆" else "Séance de Sport Complétée ! ⚡"
+        val message = if (isTask) {
+            "Félicitations pour avoir accompli : $name !"
+        } else {
+            "Génial ! Vous avez terminé : $name. Continuez ainsi ! 🔥"
+        }
+
+        val openIntent = Intent(context, com.example.MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            id,
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val soundUriStr = prefs.getString("completion_sound_uri", null)
+        val builder = NotificationCompat.Builder(context, com.example.RappelQuotidienApp.CHANNEL_REMINDERS)
+            .setSmallIcon(android.R.drawable.star_on)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        if (soundUriStr != null) {
+            builder.setSound(Uri.parse(soundUriStr))
+            builder.setDefaults(NotificationCompat.DEFAULT_LIGHTS or NotificationCompat.DEFAULT_VIBRATE)
+        } else {
+            builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+        }
+
+        notificationManager.notify(id, builder.build())
     }
 }
