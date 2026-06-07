@@ -1,0 +1,6 @@
+{
+  "name": "RappelQuotidien",
+  "description": "Une application de préparation quotidienne et de bien-être offline-first complète avec graphique et alarmes précises.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
