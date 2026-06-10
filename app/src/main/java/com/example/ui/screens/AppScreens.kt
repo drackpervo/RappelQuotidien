@@ -38,6 +38,8 @@ import com.example.ui.components.MonthlyBarChart
 import com.example.ui.components.WeeklyLineChart
 import com.example.ui.components.SleepAverageView
 import com.example.ui.components.SleepRollingChart
+import com.example.ui.components.RechartsDashboardChart
+import com.example.ui.components.SleepManualInputForm
 import com.example.viewmodel.AppViewModel
 import kotlinx.coroutines.flow.*
 import java.text.SimpleDateFormat
@@ -849,6 +851,9 @@ fun SommeilSection(viewModel: AppViewModel) {
             }
         }
 
+        // Formulaire de saisie manuelle de nuit de sommeil
+        SleepManualInputForm(viewModel = viewModel)
+
         // Nouvelle vue d'analyse moyenne des 30 derniers jours
         SleepAverageView(sleepRecords = sleepHistories)
 
@@ -1158,6 +1163,12 @@ fun StatsScreen(viewModel: AppViewModel) {
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
+                item {
+                    RechartsDashboardChart(
+                        sleepRecords = sleepRecords,
+                        sportProgressList = sportRecords
+                    )
+                }
                 item {
                     WeeklyLineChart(daysData = weeklyData)
                 }

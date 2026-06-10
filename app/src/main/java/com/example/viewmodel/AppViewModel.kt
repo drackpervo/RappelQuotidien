@@ -290,6 +290,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Enregistre manuellement une nuit de sommeil entrée par l'utilisateur.
+     */
+    fun insertManualSleepSummary(
+        dateKey: String,
+        bedtimeMillis: Long,
+        wakeTimeMillis: Long,
+        durationMinutes: Int,
+        efficiency: Int
+    ) {
+        viewModelScope.launch {
+            repository.insertSleepSummary(
+                SleepSummary(
+                    dateKey = dateKey,
+                    bedtimeMillis = bedtimeMillis,
+                    wakeTimeMillis = wakeTimeMillis,
+                    durationMinutes = durationMinutes,
+                    efficiency = efficiency
+                )
+            )
+            com.example.receiver.SportTaskAppWidgetProvider.triggerUpdate(getApplication())
+        }
+    }
+
 
     // --- ÉTAT DES RAPPELS ---
     val allReminders: StateFlow<List<Reminder>> = repository.getAllReminders()
