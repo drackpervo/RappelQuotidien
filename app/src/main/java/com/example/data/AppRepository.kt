@@ -60,6 +60,10 @@ class AppRepository(private val db: AppDatabase) {
         db.sleepDao().insertSleepSummary(summary)
     }
 
+    suspend fun deleteSleepSummary(summary: SleepSummary) {
+        db.sleepDao().deleteSleepSummary(summary)
+    }
+
     // Reminders
     fun getAllReminders(): Flow<List<Reminder>> {
         return db.reminderDao().getAllReminders()

@@ -41,6 +41,7 @@ import com.example.ui.components.SleepRollingChart
 import com.example.ui.components.RechartsDashboardChart
 import com.example.ui.components.SleepManualInputForm
 import com.example.ui.components.ClockTimerPicker
+import com.example.ui.components.FitnessStreakTracker
 import com.example.viewmodel.AppViewModel
 import kotlinx.coroutines.flow.*
 import java.text.SimpleDateFormat
@@ -133,37 +134,105 @@ fun PlanningScreen(viewModel: AppViewModel) {
                     color = MaterialTheme.colorScheme.primary
                 )
 
-                // Formulaire d'ajout rapide pour ce jour précis
-                Row(
+                // Formulaire d'ajout rapide pour ce jour précis avec choix de priorité
+                var selectedPriority by remember { mutableStateOf("MEDIUM") }
+
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedTextField(
-                        value = taskInputText,
-                        onValueChange = { taskInputText = it },
-                        placeholder = { Text("Ajouter un objectif de tâche...") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = MaterialTheme.colorScheme.primary,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    FloatingActionButton(
-                        onClick = {
-                            if (taskInputText.isNotBlank()) {
-                                viewModel.addTask(taskInputText)
-                                taskInputText = ""
-                            }
-                        },
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.size(48.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Ajouter")
+                        OutlinedTextField(
+                            value = taskInputText,
+                            onValueChange = { taskInputText = it },
+                            placeholder = { Text("Ajouter un objectif de tâche...") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                            ),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        FloatingActionButton(
+                            onClick = {
+                                if (taskInputText.isNotBlank()) {
+                                    viewModel.addTask(taskInputText, selectedPriority)
+                                    taskInputText = ""
+                                }
+                            },
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Ajouter")
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Priorité :",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FilterChip(
+                            selected = selectedPriority == "HIGH",
+                            onClick = { selectedPriority = "HIGH" },
+                            label = { Text("🔴 Haute") },
+                            modifier = Modifier.testTag("priority_chip_high")
+                        )
+                        FilterChip(
+                            selected = selectedPriority == "MEDIUM",
+                            onClick = { selectedPriority = "MEDIUM" },
+                            label = { Text("🟡 Moyenne") },
+                            modifier = Modifier.testTag("priority_chip_medium")
+                        )
+                        FilterChip(
+                            selected = selectedPriority == "LOW",
+                            onClick = { selectedPriority = "LOW" },
+                            label = { Text("🟢 Basse") },
+                            modifier = Modifier.testTag("priority_chip_low")
+                        )
+                    }
+                }
+
+                // Section Filtrage par priorité
+                val currentPriorityFilter by viewModel.selectedPriorityFilter.collectAsState()
+
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Filtrer par priorité :",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(
+                            "ALL" to "📑 Toutes",
+                            "HIGH" to "🔴 Haute",
+                            "MEDIUM" to "🟡 Moyenne",
+                            "LOW" to "🟢 Basse"
+                        ).forEach { (key, label) ->
+                            val isSelected = currentPriorityFilter == key
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { viewModel.selectedPriorityFilter.value = key },
+                                label = { Text(label) },
+                                modifier = Modifier.testTag("filter_chip_$key")
+                            )
+                        }
                     }
                 }
 
@@ -184,7 +253,7 @@ fun PlanningScreen(viewModel: AppViewModel) {
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = "Aucune tâche enregistrée aujourd'hui.",
+                                text = "Aucune tâche ne correspond à vos filtres.",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -196,49 +265,7 @@ fun PlanningScreen(viewModel: AppViewModel) {
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         tasks.forEach { task ->
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(12.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (task.isCompleted)
-                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                    else
-                                        MaterialTheme.colorScheme.surface
-                                ),
-                                border = borderStrokeForTask(task.isCompleted)
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = task.isCompleted,
-                                        onCheckedChange = { viewModel.toggleTaskCompletion(task) },
-                                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = task.title,
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            fontWeight = FontWeight.Medium
-                                        ),
-                                        color = if (task.isCompleted)
-                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                        else
-                                            MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    IconButton(onClick = { viewModel.deleteTask(task) }) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Supprimer",
-                                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                                        )
-                                    }
-                                }
-                            }
+                            TaskItem(task = task, viewModel = viewModel)
                         }
                     }
                 }
@@ -274,38 +301,106 @@ fun PlanningScreen(viewModel: AppViewModel) {
                 }
             }
 
+                      // Formulaire d'ajout de tâche
+            var selectedPrioritySecondary by remember { mutableStateOf("MEDIUM") }
+
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = taskInputText,
+                        onValueChange = { taskInputText = it },
+                        placeholder = { Text("Nouvel objectif...") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                        ),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    FloatingActionButton(
+                        onClick = {
+                            if (taskInputText.isNotBlank()) {
+                                viewModel.addTask(taskInputText, selectedPrioritySecondary)
+                                taskInputText = ""
+                            }
+                        },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Ajouter")
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Priorité :",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    FilterChip(
+                        selected = selectedPrioritySecondary == "HIGH",
+                        onClick = { selectedPrioritySecondary = "HIGH" },
+                        label = { Text("🔴 Haute") },
+                        modifier = Modifier.testTag("priority_chip_high_sec")
+                    )
+                    FilterChip(
+                        selected = selectedPrioritySecondary == "MEDIUM",
+                        onClick = { selectedPrioritySecondary = "MEDIUM" },
+                        label = { Text("🟡 Moyenne") },
+                        modifier = Modifier.testTag("priority_chip_medium_sec")
+                    )
+                    FilterChip(
+                        selected = selectedPrioritySecondary == "LOW",
+                        onClick = { selectedPrioritySecondary = "LOW" },
+                        label = { Text("🟢 Basse") },
+                        modifier = Modifier.testTag("priority_chip_low_sec")
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Formulaire d'ajout de tâche
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = taskInputText,
-                    onValueChange = { taskInputText = it },
-                    placeholder = { Text("Nouvel objectif...") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = MaterialTheme.colorScheme.primary,
-                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
-                    ),
-                    shape = RoundedCornerShape(12.dp)
+            // Section Filtrage par priorité
+            val currentPriorityFilterSecondary by viewModel.selectedPriorityFilter.collectAsState()
+
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Filtrer par priorité :",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(bottom = 6.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                FloatingActionButton(
-                    onClick = {
-                        if (taskInputText.isNotBlank()) {
-                            viewModel.addTask(taskInputText)
-                            taskInputText = ""
-                        }
-                    },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                    shape = RoundedCornerShape(12.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = "Ajouter")
+                    listOf(
+                        "ALL" to "📑 Toutes",
+                        "HIGH" to "🔴 Haute",
+                        "MEDIUM" to "🟡 Moyenne",
+                        "LOW" to "🟢 Basse"
+                    ).forEach { (key, label) ->
+                        val isSelected = currentPriorityFilterSecondary == key
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { viewModel.selectedPriorityFilter.value = key },
+                            label = { Text(label) },
+                            modifier = Modifier.testTag("filter_chip_sec_$key")
+                        )
+                    }
                 }
             }
 
@@ -328,7 +423,7 @@ fun PlanningScreen(viewModel: AppViewModel) {
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "Aucune tâche pour cette période.",
+                            text = "Aucune tâche ne correspond à vos filtres.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -345,49 +440,7 @@ fun PlanningScreen(viewModel: AppViewModel) {
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(tasks, key = { it.id }) { task ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (task.isCompleted)
-                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                                else
-                                    MaterialTheme.colorScheme.surface
-                            ),
-                            border = borderStrokeForTask(task.isCompleted)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = task.isCompleted,
-                                    onCheckedChange = { viewModel.toggleTaskCompletion(task) },
-                                    colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = task.title,
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = if (task.isCompleted)
-                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                    else
-                                        MaterialTheme.colorScheme.onSurface,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(onClick = { viewModel.deleteTask(task) }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Supprimer",
-                                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
-                                    )
-                                }
-                            }
-                        }
+                        TaskItem(task = task, viewModel = viewModel)
                     }
                 }
             }
@@ -396,11 +449,103 @@ fun PlanningScreen(viewModel: AppViewModel) {
 }
 
 @Composable
-fun borderStrokeForTask(isCompleted: Boolean) =
-    if (isCompleted) null else androidx.compose.foundation.BorderStroke(
-        1.dp,
-        MaterialTheme.colorScheme.outlineVariant
-    )
+fun TaskItem(
+    task: com.example.data.PlanningTask,
+    viewModel: AppViewModel
+) {
+    val priorityInfo = when (task.priority.uppercase()) {
+        "HIGH" -> Triple("🔴 Haute", Color(0xFFD32F2F), Color(0xFFFFEBEE))
+        "LOW" -> Triple("🟢 Basse", Color(0xFF388E3C), Color(0xFFE8F5E9))
+        else -> Triple("🟡 Moyenne", Color(0xFFF57C00), Color(0xFFFFF3E0))
+    }
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("task_item_${task.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (task.isCompleted)
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+            else
+                MaterialTheme.colorScheme.surface
+        ),
+        border = if (task.isCompleted) null else androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Un petit indicateur vertical de priorité sur la gauche
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(36.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(if (task.isCompleted) Color.Gray.copy(alpha = 0.5f) else priorityInfo.second)
+            )
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Checkbox(
+                checked = task.isCompleted,
+                onCheckedChange = { viewModel.toggleTaskCompletion(task) },
+                colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary),
+                modifier = Modifier.testTag("task_checkbox_${task.id}")
+            )
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = task.title,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontWeight = FontWeight.Medium,
+                        textDecoration = if (task.isCompleted) androidx.compose.ui.text.style.TextDecoration.LineThrough else null
+                    ),
+                    color = if (task.isCompleted)
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    else
+                        MaterialTheme.colorScheme.onSurface
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Priority Badge
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (task.isCompleted) Color.LightGray.copy(alpha = 0.3f) else priorityInfo.third)
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = priorityInfo.first,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                        color = if (task.isCompleted) Color.Gray else priorityInfo.second
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = { viewModel.deleteTask(task) },
+                modifier = Modifier.testTag("delete_task_btn_${task.id}")
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = "Supprimer",
+                    tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f)
+                )
+            }
+        }
+    }
+}
 
 /**
  * Écran Bien-être rassemblant le Sport Journalier, le Minuteur et le Sommeil.
@@ -557,34 +702,11 @@ fun SportSection(viewModel: AppViewModel) {
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Facteur Streak ( jours consécutifs )
-            Divider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.4f))
-                    .padding(horizontal = 20.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = "🔥",
-                    fontSize = 24.sp,
-                    modifier = Modifier.padding(end = 6.dp)
-                )
-                Text(
-                    text = "Série d'assiduité : ",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.onTertiaryContainer
-                )
-                Text(
-                    text = "$streak jours consécutifs",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
+            // Composant de suivi de régularité interactif avec calendrier glissant
+            FitnessStreakTracker(
+                viewModel = viewModel,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -914,7 +1036,10 @@ fun SommeilSection(viewModel: AppViewModel) {
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.weight(1f)
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.Bedtime,
                                         contentDescription = null,
@@ -928,20 +1053,36 @@ fun SommeilSection(viewModel: AppViewModel) {
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                 }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(
-                                            if (sleep.efficiency >= 85) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.primaryContainer
-                                        )
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = "${sleep.efficiency}% Eff.",
-                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                                        color = if (sleep.efficiency >= 85) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(
+                                                if (sleep.efficiency >= 85) Color(0xFFE8F5E9) else MaterialTheme.colorScheme.primaryContainer
+                                            )
+                                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "${sleep.efficiency}% Eff.",
+                                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                            color = if (sleep.efficiency >= 85) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { viewModel.deleteSleepSummary(sleep) },
+                                        modifier = Modifier.size(32.dp).testTag("delete_sleep_summary_${sleep.dateKey}")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Delete,
+                                            contentDescription = "Supprimer cette nuit",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
                             }
 

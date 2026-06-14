@@ -64,26 +64,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         selectedMonthKey.value = sdfMonth.format(now)
     }
 
+    // Filtre de priorité de tâche : "ALL", "HIGH", "MEDIUM", "LOW"
+    val selectedPriorityFilter = MutableStateFlow("ALL")
+
     val allTasks: Flow<List<PlanningTask>> = repository.getAllTasks()
 
-    // Flux de tâches filtré réactivement par période sélectionnée
-    val currentTasks: StateFlow<List<PlanningTask>> = combine(
+    // Flux de période combiné
+    private val currentPeriodAndKey: Flow<Pair<String, String>> = combine(
         selectedPeriodType,
         selectedDayKey,
         selectedWeekKey,
-        selectedMonthKey,
-        allTasks
-    ) { pType, day, week, month, tasks ->
+        selectedMonthKey
+    ) { pType, day, week, month ->
         val key = when (pType) {
             "DAY" -> day
             "WEEK" -> week
             "MONTH" -> month
             else -> day
         }
-        tasks.filter { it.periodType == pType && it.periodKey == key }
+        Pair(pType, key)
+    }
+
+    // Flux de tâches filtré réactivement par période sélectionnée et par priorité choisie
+    val currentTasks: StateFlow<List<PlanningTask>> = combine(
+        currentPeriodAndKey,
+        selectedPriorityFilter,
+        allTasks
+    ) { periodInfo, priorityFilter, tasks ->
+        val pType = periodInfo.first
+        val key = periodInfo.second
+        val byPeriod = tasks.filter { it.periodType == pType && it.periodKey == key }
+        if (priorityFilter == "ALL") {
+            byPeriod
+        } else {
+            byPeriod.filter { it.priority.uppercase() == priorityFilter.uppercase() }
+        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun addTask(title: String) {
+    fun addTask(title: String, priority: String = "MEDIUM") {
         val pType = selectedPeriodType.value
         val key = when (pType) {
             "DAY" -> selectedDayKey.value
@@ -97,7 +115,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 PlanningTask(
                     title = title,
                     periodType = pType,
-                    periodKey = key
+                    periodKey = key,
+                    priority = priority.uppercase()
                 )
             )
             com.example.receiver.SportTaskAppWidgetProvider.triggerUpdate(getApplication())
@@ -159,8 +178,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     fun toggleTodaySport() {
+        toggleSportForDate(todayDateKey, dailyProposedSportName)
+    }
+
+    fun toggleSportForDate(dateKey: String, exerciseName: String = "Activité physique") {
         viewModelScope.launch {
-            val current = repository.getSportProgressByDate(todayDateKey)
+            val current = repository.getSportProgressByDate(dateKey)
             if (current != null) {
                 val newlyCompleted = !current.isCompleted
                 repository.saveSportProgress(
@@ -175,13 +198,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 repository.saveSportProgress(
                     SportProgress(
-                        dateKey = todayDateKey,
-                        exerciseName = dailyProposedSportName,
+                        dateKey = dateKey,
+                        exerciseName = exerciseName,
                         isCompleted = true,
                         completionTime = System.currentTimeMillis()
                     )
                 )
-                playCompletionSoundAndNotification(dailyProposedSportName, isTask = false)
+                playCompletionSoundAndNotification(exerciseName, isTask = false)
             }
             com.example.receiver.SportTaskAppWidgetProvider.triggerUpdate(getApplication())
         }
@@ -310,6 +333,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     efficiency = efficiency
                 )
             )
+            com.example.receiver.SportTaskAppWidgetProvider.triggerUpdate(getApplication())
+        }
+    }
+
+    /**
+     * Supprime une nuit de sommeil existante.
+     */
+    fun deleteSleepSummary(summary: SleepSummary) {
+        viewModelScope.launch {
+            repository.deleteSleepSummary(summary)
             com.example.receiver.SportTaskAppWidgetProvider.triggerUpdate(getApplication())
         }
     }

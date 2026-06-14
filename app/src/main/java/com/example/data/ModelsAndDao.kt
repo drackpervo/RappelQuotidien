@@ -13,6 +13,7 @@ data class PlanningTask(
     val periodType: String, // "DAY", "WEEK", "MONTH"
     val periodKey: String,   // "YYYY-MM-DD", "YYYY-Www", "YYYY-MM"
     val isCompleted: Boolean = false,
+    val priority: String = "MEDIUM", // "HIGH", "MEDIUM", "LOW"
     val createdAt: Long = System.currentTimeMillis()
 )
 
@@ -116,6 +117,9 @@ interface SleepDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSleepSummary(summary: SleepSummary)
+
+    @Delete
+    suspend fun deleteSleepSummary(summary: SleepSummary)
 }
 
 /**
