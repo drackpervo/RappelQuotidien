@@ -369,7 +369,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // --- ÉTAT DU MINUTEUR ---
     var timerActivityName = MutableStateFlow("Méditation")
-    var timerDurationMinutes = MutableStateFlow(5)
+    var timerDurationSeconds = MutableStateFlow(30) // Commencer par 30 secondes !
     var timerRemainingSeconds = MutableStateFlow(0)
     var timerIsRunning = MutableStateFlow(false)
 
@@ -380,9 +380,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val targetMillis = prefs.getLong("timer_target_millis", 0L)
         if (targetMillis > System.currentTimeMillis()) {
             val savedActivity = prefs.getString("timer_activity_name", "Méditation") ?: "Méditation"
-            val savedDur = prefs.getInt("timer_duration_mins", 5)
+            val savedDur = prefs.getInt("timer_duration_secs", 30)
             timerActivityName.value = savedActivity
-            timerDurationMinutes.value = savedDur
+            timerDurationSeconds.value = savedDur
             timerIsRunning.value = true
             
             val remainingSecs = ((targetMillis - System.currentTimeMillis()) / 1000).toInt()
@@ -391,26 +391,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startTimer(activityName: String, minutes: Int) {
+    fun startTimer(activityName: String, seconds: Int) {
         timerJob?.cancel()
         timerActivityName.value = activityName
-        timerDurationMinutes.value = minutes
+        timerDurationSeconds.value = seconds
         
-        val durationSeconds = minutes * 60
-        timerRemainingSeconds.value = durationSeconds
+        timerRemainingSeconds.value = seconds
         timerIsRunning.value = true
 
-        val targetMillis = System.currentTimeMillis() + (durationSeconds * 1000L)
+        val targetMillis = System.currentTimeMillis() + (seconds * 1000L)
         
         // Sauvegarde de l'état pour restauration
         prefs.edit()
             .putLong("timer_target_millis", targetMillis)
             .putString("timer_activity_name", activityName)
-            .putInt("timer_duration_mins", minutes)
+            .putInt("timer_duration_secs", seconds)
             .apply()
 
         // Enregistrement d'un réveil précis AlarmManager pour l'arrière-plan
-        scheduleTimerBackgroundReceiver(activityName, minutes, targetMillis)
+        scheduleTimerBackgroundReceiver(activityName, seconds, targetMillis)
 
         startLocalTicking()
     }
@@ -426,7 +425,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         prefs.edit()
             .remove("timer_target_millis")
             .remove("timer_activity_name")
-            .remove("timer_duration_mins")
+            .remove("timer_duration_secs")
             .apply()
     }
 
@@ -440,12 +439,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private fun scheduleTimerBackgroundReceiver(activityName: String, durationMins: Int, targetMillis: Long) {
+    private fun scheduleTimerBackgroundReceiver(activityName: String, durationSecs: Int, targetMillis: Long) {
         val context = getApplication<Application>()
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, TimerAlarmReceiver::class.java).apply {
             putExtra("activity_name", activityName)
-            putExtra("duration_minutes", durationMins)
+            putExtra("duration_minutes", durationSecs / 60)
+            putExtra("duration_seconds", durationSecs)
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,

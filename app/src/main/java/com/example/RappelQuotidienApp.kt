@@ -17,13 +17,17 @@ class RappelQuotidienApp : Application() {
         // Configuration des canaux de notifications
         createNotificationChannels()
 
-        // Enregistrement dynamique du récepteur d'événements de l'écran
+        // Enregistrement dynamique du récepteur d'événements de l'écran avec les indicateurs de sécurité modernes (API 33+)
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_USER_PRESENT)
         }
-        registerReceiver(ScreenReceiver(), filter)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(ScreenReceiver(), filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(ScreenReceiver(), filter)
+        }
     }
 
     private fun createNotificationChannels() {

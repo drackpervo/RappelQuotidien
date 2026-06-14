@@ -40,6 +40,7 @@ import com.example.ui.components.SleepAverageView
 import com.example.ui.components.SleepRollingChart
 import com.example.ui.components.RechartsDashboardChart
 import com.example.ui.components.SleepManualInputForm
+import com.example.ui.components.ClockTimerPicker
 import com.example.viewmodel.AppViewModel
 import kotlinx.coroutines.flow.*
 import java.text.SimpleDateFormat
@@ -595,11 +596,11 @@ fun SportSection(viewModel: AppViewModel) {
 fun MinuteurSection(viewModel: AppViewModel) {
     val isRunning by viewModel.timerIsRunning.collectAsState()
     val remainingSeconds by viewModel.timerRemainingSeconds.collectAsState()
-    val durationMins by viewModel.timerDurationMinutes.collectAsState()
+    val durationSecondsState by viewModel.timerDurationSeconds.collectAsState()
     val activityName by viewModel.timerActivityName.collectAsState()
 
     var customActivityInput by remember { mutableStateOf("Méditation") }
-    var selectedDuration by remember { mutableStateOf(5) }
+    var selectedDurationSeconds by remember { mutableStateOf(30) } // Par défaut 30 secondes !
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -630,26 +631,21 @@ fun MinuteurSection(viewModel: AppViewModel) {
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
-                Text(
-                    text = "Durée : $selectedDuration minutes",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Slider(
-                    value = selectedDuration.toFloat(),
-                    onValueChange = { selectedDuration = it.toInt() },
-                    valueRange = 1f..60f,
-                    steps = 59,
-                    modifier = Modifier.fillMaxWidth()
+                // Sélecteur de durée style Application Horloge
+                ClockTimerPicker(
+                    initialSeconds = selectedDurationSeconds,
+                    onDurationChanged = { selectedDurationSeconds = it },
+                    modifier = Modifier.padding(vertical = 4.dp)
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(18.dp))
 
                 // Bouton de lancement
                 Button(
-                    onClick = { viewModel.startTimer(customActivityInput, selectedDuration) },
+                    onClick = { viewModel.startTimer(customActivityInput, selectedDurationSeconds) },
+                    enabled = selectedDurationSeconds > 0,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
@@ -657,7 +653,10 @@ fun MinuteurSection(viewModel: AppViewModel) {
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Lancer le minuteur", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
+                    Text(
+                        text = if (selectedDurationSeconds > 0) "Lancer le minuteur" else "Définir une durée",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
+                    )
                 }
             } else {
                 // Minuteur en cours de décompte (Affichage circulaire)
@@ -665,7 +664,7 @@ fun MinuteurSection(viewModel: AppViewModel) {
                 
                 val displayMinutes = remainingSeconds / 60
                 val displaySeconds = remainingSeconds % 60
-                val percentProgress = remainingSeconds.toFloat() / (durationMins * 60f)
+                val percentProgress = remainingSeconds.toFloat() / durationSecondsState.toFloat()
 
                 Box(
                     contentAlignment = Alignment.Center,
